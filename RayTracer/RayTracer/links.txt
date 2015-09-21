@@ -1,0 +1,6 @@
+https://github.com/LWJGL/lwjgl3-wiki/wiki/2.6.1.-Ray-tracing-with-OpenGL-Compute-Shaders-(Part-I)
+
+http://web.engr.oregonstate.edu/~mjb/cs557/Handouts/compute.shader.1pp.pdf
+
+https://www.cg.tuwien.ac.at/courses/Realtime/repetitorium/rtr_rep_2014_ComputeShader.pdf
+
