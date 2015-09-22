@@ -8,77 +8,154 @@ uniform vec3 ray10;
 uniform vec3 ray11;
 
 struct box {
-  vec3 min;
-  vec3 max;
+	vec3 min;
+	vec3 max;
+};
+
+struct sphere {
+	vec3 pos;
+	float r;
 };
 
 #define MAX_SCENE_BOUNDS 100.0
 #define NUM_BOXES 2
+#define NUM_SPHERES 2
 
 const box boxes[] = {
-  /* The ground */
-  {vec3(-5.0, -0.1, -5.0), vec3(5.0, 0.0, 5.0)},
-  /* Box in the middle */
-  {vec3(-0.5, 0.0, -0.5), vec3(0.5, 1.0, 0.5)}
+	/* The ground */
+	{vec3(-5.0, -0.1, -5.0), vec3(5.0, 0.0, 5.0)},
+	/* Box in the middle */
+	{vec3(-0.5, 0.0, -0.5), vec3(0.5, 1.0, 0.5)}
+};
+
+const sphere spheres[] = {
+	/* The ground */
+	{vec3(5.0, -0.1, -5.0), 1.0},
+	/* Box in the middle */
+	{vec3(-0.5, 5.0, -0.5), 1.0}
 };
 
 struct hitinfo {
-  vec2 lambda;
-  int bi;
+	vec2 lambda;
+	int bi;
 };
 
 vec2 intersectBox(vec3 origin, vec3 dir, const box b) {
-  vec3 tMin = (b.min - origin) / dir;
-  vec3 tMax = (b.max - origin) / dir;
-  vec3 t1 = min(tMin, tMax);
-  vec3 t2 = max(tMin, tMax);
-  float tNear = max(max(t1.x, t1.y), t1.z);
-  float tFar = min(min(t2.x, t2.y), t2.z);
-  return vec2(tNear, tFar);
+	vec3 tMin = (b.min - origin) / dir;
+	vec3 tMax = (b.max - origin) / dir;
+	vec3 t1 = min(tMin, tMax);
+	vec3 t2 = max(tMin, tMax);
+	float tNear = max(max(t1.x, t1.y), t1.z);
+	float tFar = min(min(t2.x, t2.y), t2.z);
+	return vec2(tNear, tFar);
 }
 
 bool intersectBoxes(vec3 origin, vec3 dir, out hitinfo info) {
-  float smallest = MAX_SCENE_BOUNDS;
-  bool found = false;
-  for (int i = 0; i < NUM_BOXES; i++) {
-    vec2 lambda = intersectBox(origin, dir, boxes[i]);
-    if (lambda.x > 0.0 && lambda.x < lambda.y && lambda.x < smallest) {
-      info.lambda = lambda;
-      info.bi = i;
-      smallest = lambda.x;
-      found = true;
+	float smallest = MAX_SCENE_BOUNDS;
+	bool found = false;
+	for (int i = 0; i < NUM_BOXES; i++) {
+		vec2 lambda = intersectBox(origin, dir, boxes[i]);
+		if (lambda.x > 0.0 && lambda.x < lambda.y && lambda.x < smallest) {
+			info.lambda = lambda;
+			info.bi = i;
+			smallest = lambda.x;
+			found = true;
+		}
+	}
+	return found;
+}
+
+vec2 intersectSphere(vec3 origin, vec3 dir, const sphere s) {
+//	float b = dot(dir, origin - s.pos);
+//	float c = dot(origin - s.pos, origin - s.pos) - powf(s.r, 2.0f);
+//
+//	return powf(b, 2.0f) - c;
+	
+	//Squared distance between ray origin and sphere center
+    float squaredDist = dot(origin - s.pos, origin - s.pos);
+
+    //If the distance is less than the squared radius of the sphere...
+    if(squaredDist <= s.r)
+    {
+        //Point is in sphere, consider as no intersection existing
+        //std::cout << "Point inside sphere..." << std::endl;
+        return vec2(MAX_SCENE_BOUNDS, MAX_SCENE_BOUNDS);
     }
-  }
-  return found;
+
+    //Will hold solution to quadratic equation
+    float t0, t1;
+
+    //Calculating the coefficients of the quadratic equation
+    float a = dot(dir,dir); // a = d*d
+    float b = 2.0 * dot(dir, origin - s.pos); // b = 2d(o-C)
+    float c = dot(origin - s.pos, origin - s.pos) - (s.r*s.r); // c = (o-C)^2-R^2
+
+    //Calculate discriminant
+    float disc = (b*b)-(4.0*a*c);
+
+    if(disc < 0) //If discriminant is negative no intersection happens
+    {
+        //std::cout << "No intersection with sphere..." << std::endl;
+        return vec2(MAX_SCENE_BOUNDS, MAX_SCENE_BOUNDS);
+    }
+    else //If discriminant is positive one or two intersections (two solutions) exists
+    {
+        float sqrt_disc = sqrt(disc);
+        t0 = (-b - sqrt_disc) / (2.0f * a);
+        t1 = (-b + sqrt_disc) / (2.0f * a);
+		return vec2(min(t0, t1), max(t0, t1));
+    }
+}
+
+bool intersectSpheres(vec3 origin, vec3 dir, out hitinfo info) {
+	float smallest = MAX_SCENE_BOUNDS;
+	bool found = false;
+	for (int i = 0; i < NUM_SPHERES; i++) {
+		vec2 lambda = intersectSphere(origin, dir, spheres[i]);
+		if (lambda.x > 0.0 && lambda.x < lambda.y && lambda.x < smallest) {
+			info.lambda = lambda;
+			info.bi = i;
+			smallest = lambda.x;
+			found = true;
+		}
+	}
+	return found;
 }
 
 vec4 trace(vec3 origin, vec3 dir) {
-  hitinfo i;
-  if (intersectBoxes(origin, dir, i)) {
-    vec4 gray = vec4(i.bi / 10.0 + 0.8);
-    return vec4(gray.rgb, 1.0);
-  }
-  return vec4(0.0, 0.0, 0.0, 1.0);
+	vec4 ret = vec4(1.0, 0.5, 0.0, 1.0);
+	hitinfo i;
+	i.lambda = vec2(MAX_SCENE_BOUNDS, MAX_SCENE_BOUNDS);
+	i.bi = -1;
+	hitinfo i2;
+	i2.lambda = vec2(MAX_SCENE_BOUNDS, MAX_SCENE_BOUNDS);
+	i2.bi = -1;
+	if(intersectSpheres(origin, dir, i)) {
+		ret = vec4(i.bi / 5.0 + 0.8, 1.0, 0.0, 1.0);
+		i2 = i;
+		//return vec4(gray.rg, 0.4, 1.0);
+	} 
+	if (intersectBoxes(origin, dir, i)) {
+		if(i2.lambda.x > i.lambda.x) {
+		ret = vec4(i.bi / 10.0 + 0.8);
+		//return vec4(gray.rgb, 1.0);
+		i2 = i;
+		}
+	}
+	
+	return ret;
 }
 
 layout (local_size_x = 16, local_size_y = 16) in;
 void main(void) {
-  ivec2 pix = ivec2(gl_GlobalInvocationID.xy);
-  ivec2 size = imageSize(outputTexture);
-  if (pix.x >= size.x || pix.y >= size.y) {
-    return;
-  }
-  vec2 pos = vec2(pix) / vec2(size.x - 1, size.y - 1);
-  vec3 dir = mix(mix(ray00, ray01, pos.y), mix(ray10, ray11, pos.y), pos.x);
-  vec4 color = trace(eye, dir);
-  imageStore(outputTexture, pix, color);
+	ivec2 pix = ivec2(gl_GlobalInvocationID.xy);
+	ivec2 size = imageSize(outputTexture);
+	if (pix.x >= size.x || pix.y >= size.y) {
+		return;
+	}
+	vec2 pos = vec2(pix) / vec2(size.x - 1, size.y - 1);
+	vec3 dir = mix(mix(ray00, ray01, pos.y), mix(ray10, ray11, pos.y), pos.x);
+	vec4 color = trace(eye, dir);
+	imageStore(outputTexture, pix, color);
 }
 
-
-
-
-//layout (local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
-//void main() {
-//	ivec2 outputPos = ivec2(gl_GlobalInvocationID.xy);
-//	imageStore(outputTexture, outputPos, vec4(0.9, green, 0.9, 0.0));
-//}
