@@ -17,9 +17,17 @@ struct sphere {
 	float r;
 };
 
+struct triangle {
+	vec3 p0;
+	vec3 p1;
+	vec3 p2;
+};
+
 #define MAX_SCENE_BOUNDS 100.0
 #define NUM_BOXES 2
 #define NUM_SPHERES 2
+#define NUM_TRIANGLES 2
+//#define NUM_LIGHTS 1
 
 const box boxes[] = {
 	/* The ground */
@@ -35,10 +43,28 @@ const sphere spheres[] = {
 	{vec3(-0.5, 5.0, -0.5), 1.0}
 };
 
+const triangle triangles[] = {
+	/* The ground */
+	{vec3(5.0, -5.1, -6.0), vec3(5.0, -5.1, -4.0), vec3(-5.0, -5.1, -5.0)},
+	{vec3(5.0, -5.1, -6.0), vec3(5.0, -2.1, -4.0), vec3(-5.0, -5.1, -5.0)}
+};
+
+//const vec3 lights[] {
+//	vec3(1,1,1)
+//};
+
 struct hitinfo {
 	vec2 lambda;
 	int bi;
 };
+
+////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////
+////
+//// 			Box collision
+////
+////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////
 
 vec2 intersectBox(vec3 origin, vec3 dir, const box b) {
 	vec3 tMin = (b.min - origin) / dir;
@@ -64,6 +90,16 @@ bool intersectBoxes(vec3 origin, vec3 dir, out hitinfo info) {
 	}
 	return found;
 }
+
+
+////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////
+////
+//// 			Sphere collision
+////
+////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////
+
 
 vec2 intersectSphere(vec3 origin, vec3 dir, const sphere s) {
 //	float b = dot(dir, origin - s.pos);
@@ -122,6 +158,77 @@ bool intersectSpheres(vec3 origin, vec3 dir, out hitinfo info) {
 	return found;
 }
 
+////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////
+////
+//// 			Triangle collision
+////
+////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////
+
+
+vec2 intersectTriangle(vec3 origin, vec3 dir, const triangle tri) {
+	vec3 p0, p1, p2;
+
+	p0 = tri.p0;
+	p1 = tri.p1;
+	p2 = tri.p2;
+
+	vec3 e1 = p1 - p0;
+	vec3 e2 = p2 - p0;
+
+	vec3 q = cross(dir, e2);
+	float a = dot(e1, q);
+
+	if(a > -pow(10, -20) && a < pow(10, -20))
+	{
+		return vec2(MAX_SCENE_BOUNDS, MAX_SCENE_BOUNDS);
+	}
+
+	float f = 1.0f/a;
+	vec3 s = origin - p0;
+	float u = dot(dot(s,q),f);
+
+	if(u < 0.0f)
+	{
+		return vec2(MAX_SCENE_BOUNDS, MAX_SCENE_BOUNDS);
+	}
+
+	vec3 r = cross(s,e1);
+	float v = dot(dot(dir,r),f);
+
+	if(v < 0.0f || u + v > 1.0f)
+	{
+		return vec2(MAX_SCENE_BOUNDS, MAX_SCENE_BOUNDS);
+	}
+
+	float t = dot(dot(e2,r),f);
+	return vec2(t, MAX_SCENE_BOUNDS);
+}
+
+bool intersectTriangles(vec3 origin, vec3 dir, out hitinfo info) {
+	float smallest = MAX_SCENE_BOUNDS;
+	bool found = false;
+	for (int i = 0; i < NUM_TRIANGLES; i++) {
+		vec2 lambda = intersectTriangle(origin, dir, triangles[i]);
+		if (lambda.x > 0.0 && lambda.x < lambda.y && lambda.x < smallest) {
+			info.lambda = lambda;
+			info.bi = i;
+			smallest = lambda.x;
+			found = true;
+		}
+	}
+	return found;
+}
+
+////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////
+////
+//// 			Trace
+////
+////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////
+
 vec4 trace(vec3 origin, vec3 dir) {
 	vec4 ret = vec4(1.0, 0.5, 0.0, 1.0);
 	hitinfo i;
@@ -137,11 +244,20 @@ vec4 trace(vec3 origin, vec3 dir) {
 	} 
 	if (intersectBoxes(origin, dir, i)) {
 		if(i2.lambda.x > i.lambda.x) {
-		ret = vec4(i.bi / 10.0 + 0.8);
-		//return vec4(gray.rgb, 1.0);
-		i2 = i;
+			ret = vec4(i.bi / 10.0 + 0.8);
+			//return vec4(gray.rgb, 1.0);
+			i2 = i;
 		}
 	}
+	if (intersectTriangles(origin, dir, i)) {
+		if(i2.lambda.x > i.lambda.x) {
+			ret = vec4(i.bi / 5.0 + 0.8, 0.0, 1.0, 1.0);
+			//return vec4(gray.rgb, 1.0);
+			i2 = i;
+		}
+	}
+	
+	
 	
 	return ret;
 }
