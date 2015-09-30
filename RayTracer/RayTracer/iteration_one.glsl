@@ -27,7 +27,7 @@ struct triangle {
 #define NUM_BOXES 2
 #define NUM_SPHERES 2
 #define NUM_TRIANGLES 2
-//#define NUM_LIGHTS 1
+#define NUM_LIGHTS 2
 
 const box boxes[] = {
 	/* The ground */
@@ -49,13 +49,19 @@ const triangle triangles[] = {
 	{vec3(5.0, -5.1, -6.0), vec3(5.0, -2.1, -4.0), vec3(-5.0, -5.1, -5.0)}
 };
 
-//const vec3 lights[] {
-//	vec3(1,1,1)
-//};
+const sphere lights[] = {
+	{vec3(-4.5, -5.0, -0.5), 1.0},
+	{vec3(-0.5, 3.0, 2.5), 1.0}
+};
 
 struct hitinfo {
 	vec2 lambda;
 	int bi;
+};
+
+struct traceStruct {
+	hitinfo info;
+	vec4 color;
 };
 
 ////////////////////////////////////////////////////////////////////////////
@@ -73,6 +79,7 @@ vec2 intersectBox(vec3 origin, vec3 dir, const box b) {
 	vec3 t2 = max(tMin, tMax);
 	float tNear = max(max(t1.x, t1.y), t1.z);
 	float tFar = min(min(t2.x, t2.y), t2.z);
+	// return vec2(min(tNear, tFar), max(tNear, tFar));
 	return vec2(tNear, tFar);
 }
 
@@ -106,7 +113,7 @@ vec2 intersectSphere(vec3 origin, vec3 dir, const sphere s) {
 //	float c = dot(origin - s.pos, origin - s.pos) - powf(s.r, 2.0f);
 //
 //	return powf(b, 2.0f) - c;
-	
+
 	//Squared distance between ray origin and sphere center
     float squaredDist = dot(origin - s.pos, origin - s.pos);
 
@@ -139,7 +146,8 @@ vec2 intersectSphere(vec3 origin, vec3 dir, const sphere s) {
         float sqrt_disc = sqrt(disc);
         t0 = (-b - sqrt_disc) / (2.0f * a);
         t1 = (-b + sqrt_disc) / (2.0f * a);
-		return vec2(min(t0, t1), max(t0, t1));
+		return vec2(t0, t1);
+		//return vec2(min(t0, t1), max(t0, t1));
     }
 }
 
@@ -229,7 +237,7 @@ bool intersectTriangles(vec3 origin, vec3 dir, out hitinfo info) {
 ////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////
 
-vec4 trace(vec3 origin, vec3 dir) {
+void trace(vec3 origin, vec3 dir, out traceStruct traceInfo) {
 	vec4 ret = vec4(1.0, 0.5, 0.0, 1.0);
 	hitinfo i;
 	i.lambda = vec2(MAX_SCENE_BOUNDS, MAX_SCENE_BOUNDS);
@@ -238,17 +246,17 @@ vec4 trace(vec3 origin, vec3 dir) {
 	i2.lambda = vec2(MAX_SCENE_BOUNDS, MAX_SCENE_BOUNDS);
 	i2.bi = -1;
 	if(intersectSpheres(origin, dir, i)) {
-		ret = vec4(i.bi / 5.0 + 0.8, 1.0, 0.0, 1.0);
+		ret = vec4(i.bi / 5.0 + 0.5, 1.0, 0.0, 1.0);
 		i2 = i;
 		//return vec4(gray.rg, 0.4, 1.0);
-	} 
-	if (intersectBoxes(origin, dir, i)) {
-		if(i2.lambda.x > i.lambda.x) {
-			ret = vec4(i.bi / 10.0 + 0.8);
-			//return vec4(gray.rgb, 1.0);
-			i2 = i;
-		}
 	}
+	// if (intersectBoxes(origin, dir, i)) {
+	// 	if(i2.lambda.x > i.lambda.x) {
+	// 		ret = vec4(i.bi / 10.0 + 0.8);
+	// 		//return vec4(gray.rgb, 1.0);
+	// 		i2 = i;
+	// 	}
+	// }
 	if (intersectTriangles(origin, dir, i)) {
 		if(i2.lambda.x > i.lambda.x) {
 			ret = vec4(i.bi / 5.0 + 0.8, 0.0, 1.0, 1.0);
@@ -256,10 +264,8 @@ vec4 trace(vec3 origin, vec3 dir) {
 			i2 = i;
 		}
 	}
-	
-	
-	
-	return ret;
+	traceInfo.info = i;
+	traceInfo.color = ret;
 }
 
 layout (local_size_x = 16, local_size_y = 16) in;
@@ -271,7 +277,34 @@ void main(void) {
 	}
 	vec2 pos = vec2(pix) / vec2(size.x - 1, size.y - 1);
 	vec3 dir = mix(mix(ray00, ray01, pos.y), mix(ray10, ray11, pos.y), pos.x);
-	vec4 color = trace(eye, dir);
+
+	traceStruct tr;
+	// tr.color = vec4(1,0,0,1);
+	trace(eye, dir, tr);
+	vec4 color = tr.color;
+
+	if(tr.info.lambda.x < MAX_SCENE_BOUNDS) {
+		for(int i = 1; i < NUM_LIGHTS; i++) {
+			sphere sp = lights[i];
+			vec3 lightpos = sp.pos;
+			vec3 originHit = eye + dir * tr.info.lambda.x;
+			vec3 lightdir = lightpos - originHit;
+
+
+			traceStruct trlight;
+			trace(originHit, lightdir, trlight);
+			if(trlight.info.lambda.x < MAX_SCENE_BOUNDS) {
+				if(trlight.info.lambda.x >= length(lightdir))
+					color = color * 0.4f;
+				else
+					color = color * 0.9f;
+
+
+				// if(trlight.info.lambda.x < length(lightdir))
+				// 	color = color * 1.2f;
+				// else
+			}
+		}
+	}
 	imageStore(outputTexture, pix, color);
 }
-
